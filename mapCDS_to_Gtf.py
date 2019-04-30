@@ -73,6 +73,27 @@ def make_newFeature(chrom, source, featureType, start, end, strand, transcript, 
     f = gffutils.feature.feature_from_line(newline)
     return f
 
+def calc_cds_frame(exonsList, strand):
+    ## This functin used input CDS exons list,
+    ## calculate frame column for each CDS exon
+    ordered_cdsExon = []
+    if strand == "+":
+        ordered_cdsExon = exonsList
+    elif strand == "-":
+        ordered_cdsExon = exonsList[::-1]
+
+    frame = 0
+    cdsLen = 0
+    for i in ordered_cdsExon:
+        i.frame = str(frame)
+        exonLen = i.stop - i.start +1
+        cdsLen = cdsLen + exonLen
+        if cdsLen%3 == 0:
+            frame = 0
+        else:
+            frame = 3 - (cdsLen%3)
+    return ordered_cdsExon
+
 def Get_cds (exonsList, cds_start, cds_end, strand):
     ## This function is using exons and cds info
     ## to generate cds regions
@@ -175,11 +196,11 @@ def Get_cds (exonsList, cds_start, cds_end, strand):
         if idx < idx_left:
             i.source = "TransDecoder"
             i.featuretype = "five_prime_UTR"
-            left_UTR.append(i)
+            left_UTR.insert(len(left_UTR)-1, i)
         if idx > idx_left and idx < idx_right:
             i.source = "TransDecoder"
             i.featuretype = "CDS"
-            cds_exons.append(i)
+            cds_exons.insert(len(cds_exons)-1, i)
         if idx > idx_right:
             i.source = "TransDecoder"
             i.featuretype = "three_prime_UTR"
@@ -195,6 +216,9 @@ def Get_cds (exonsList, cds_start, cds_end, strand):
         for i in right_UTR:
             i.featuretype = "five_prime_UTR"
         fiveUTR_exons = right_UTR
+
+    # These codes is to get cds feature frame column
+    cds_exons = calc_cds_frame(cds_exons, strand)
 
     return fiveUTR_exons, threeUTR_exons, cds_exons
 
