@@ -127,7 +127,9 @@ def Get_cds (exonsList, cds_start, cds_end, strand):
     for i in exonsList:
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
-        if scanedLen >= start and scanedLen < end:
+        if scanedLen-exonLen+1 <= start and \
+           scanedLen >= start and \
+           scanedLen < end:
             lastUTR_start = i.start
             firstCDS_start = i.start + start - (scanedLen - exonLen) -1
             lastUTR_end = firstCDS_start - 1
@@ -148,7 +150,9 @@ def Get_cds (exonsList, cds_start, cds_end, strand):
     for i in exonsList:
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
-        if scanedLen >= end and scanedLen-exonLen > start:
+        if scanedLen >= end and \
+           scanedLen-exonLen+1 > start and \
+           scanedLen-exonLen+1 <= end:
             lastCDS_start = i.start
             lastCDS_end = i.start + exonLen - (scanedLen - end) -1
             firstUTR_start = lastCDS_end +1
@@ -168,7 +172,7 @@ def Get_cds (exonsList, cds_start, cds_end, strand):
     for i in exonsList:
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
-        if scanedLen >= end and scanedLen -exonLen <= start:
+        if scanedLen >= end and scanedLen -exonLen+1 <= start:
             lastUTR_start = i.start
             lastUTR_end = i.start + start - (scanedLen - exonLen) -1 -1
             CDS_start = lastUTR_end +1
