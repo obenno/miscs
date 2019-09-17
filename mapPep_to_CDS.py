@@ -45,7 +45,7 @@ def make_GFFdb (gtf_file):
                                 id_spec={"gene": "gene_id", "transcript": "transcript_id"},
                                 keep_order=True, merge_strategy="merge",
                                 sort_attribute_values=True,
-                                disable_infer_transcripts=True)
+                                disable_infer_transcripts=False)
     elif ".gff" in gtf_file:
         sys.exit("Only GTF file was supported")
 
@@ -327,7 +327,7 @@ def pep_position_to_trans_relativePOS (pep_start, pep_end, cds_relative_start, c
 def main():
     pep_file, gtf_file, out_file = parse_args(sys.argv[1:])
     pepinfo = make_pepList(pep_file)
-    print(pepinfo)
+    #print(pepinfo)
     outfn = open(out_file, "w+")
     # Make GFFdb, store db in tmpGFF.db file
     make_GFFdb(gtf_file)
