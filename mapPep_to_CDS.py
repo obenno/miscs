@@ -3,36 +3,63 @@
 ## This script is a modified version of mapCDS_to_Gtf.py to map
 ## peptides to transcript genomic regions
 
+## If you only have major ORF product in peptide_to_protein file,
+## No further information need to be provided.
+## If secondary ORF's products are also included, you need to
+## provide relative position of secondary ORFs (extract from
+## gff output of Transdecoder).
+
 import sys
 import numpy as np
 import gffutils
-import getopt
+#import getopt
+import argparse
 
 def parse_args (argv):
-    File_in = ""
-    File_out = ""
-    outfmt = ""
-    try:
-        opts, args = getopt.getopt(argv,"hp:g:o:",["pepfile=","gtf_file=","output="])
-    except getopt.GetoptError:
-        print("mapPep_to_CDS.py -p <pep_info> -g <gtf> -o <output>")
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == "-h":
-            print ("Useage: input cufflinks gtf, transdecoder pep info\n", "\n",
-                   "mapPep_to_CDS.py -p <pep_info> -g <gtf> -o <output>", "\n")
-            sys.exit()
-        elif opt in ("-p"):
-            pep_file = arg
-        elif opt in ("-g"):
-            gtf_file = arg
-        elif opt in ("-o"):
-            out_file = arg
-
+    parser = argparse.ArgumentParser(description="Map peptides to genomic regions")
+    parser.add_argument("-p", "--pep_file", help="peptide_to_protein file")
+    parser.add_argument("-g", "--gtf_file", help="transcript GTF file")
+    parser.add_argument("-o", "--out_file", help="output file name")
+    parser.add_argument("-s", "--secondary_ORF_file", help="file of relative position of secondary ORFs")
+    opts = parser.parse_args(argv)
+    pep_file = opts.pep_file
+    gtf_file = opts.gtf_file
+    out_file = opts.out_file
+    secondary_ORF_file = opts.secondary_ORF_file
     print ("Peptides file is %s" % pep_file)
     print ("GTF file is %s" % gtf_file)
     print ("Output is %s" % out_file)
-    return pep_file, gtf_file, out_file
+    if secondary_ORF_file == None:
+        print ("No secondary file provided")
+    else:
+        print ("Secondary ORFs file is %s" % secondary_ORF_file)
+    return pep_file, gtf_file, out_file, secondary_ORF_file
+
+##def parse_args (argv):
+##    File_in = ""
+##    File_out = ""
+##    outfmt = ""
+##    try:
+##        opts, args = getopt.getopt(argv,"hp:g:o:",["pepfile=","gtf_file=","output="])
+##    except getopt.GetoptError:
+##        print("mapPep_to_CDS.py -p <pep_info> -g <gtf> -o <output>")
+##        sys.exit(2)
+##    for opt, arg in opts:
+##        if opt == "-h":
+##            print ("Useage: input cufflinks gtf, transdecoder pep info\n", "\n",
+##                   "mapPep_to_CDS.py -p <pep_info> -g <gtf> -o <output>", "\n")
+##            sys.exit()
+##        elif opt in ("-p"):
+##            pep_file = arg
+##        elif opt in ("-g"):
+##            gtf_file = arg
+##        elif opt in ("-o"):
+##            out_file = arg
+##
+##    print ("Peptides file is %s" % pep_file)
+##    print ("GTF file is %s" % gtf_file)
+##    print ("Output is %s" % out_file)
+##    return pep_file, gtf_file, out_file
 
 def make_GFFdb (gtf_file):
     # Define input as gtf or gff
@@ -54,13 +81,33 @@ def make_pepList (pep_file):
     pepinfo = {}
     ## Please be noted that peptide start and end is the start/end of protein sequences
     ## Need to be converted to transcript genomic coordinates
+    ## cds_type indicates peptides are from major or secondary ORFs
     for x in pepFile:
         x = x.splitlines()[0]
         pep, trans, pep_start, pep_end = x.split("\t")[0], x.split("\t")[1], x.split("\t")[2], x.split("\t")[3]
-        pepinfo[trans] = {}
-        pepinfo[trans][pep] = [pep_start, pep_end]
+        cds_type = x.split("\t")[4]
+        cds_id = x.split("\t")[5]
+        if cds_type not in ["major", "secondary"]:
+            sys.exit("cds_type needs to be either major or secondary")
+        if trans not in pepinfo:
+            pepinfo[trans] = {}
+        pepinfo[trans][pep] = [cds_type, cds_id, pep_start, pep_end]
     pepFile.close()
     return pepinfo
+
+def make_cdsList (cds_file):
+    ## This function read secondary ORFs file
+    ## Columns are transcript_id, cds_id(prot_id), relative_start, relative_end
+    cds = open(cds_file, "rt")
+    cdsinfo = {}
+    for x in cds:
+        x = x.splitlines()[0]
+        trans, cds_id, cds_start, cds_end = x.split("\t")
+        if trans not in cdsinfo:
+            cdsinfo[trans] = {}
+        cdsinfo[trans][cds_id] = [cds_start, cds_end]
+    cds.close()
+    return cdsinfo
 
 def get_exonList (GFFdb, TranscriptFeature, Featuretype):
     ## This function return exons list of input isoform
@@ -285,7 +332,7 @@ def get_CDS_relativePos(exonsList, cdsList, strand):
                 break
             else:
                 scanedLen = scanedLen + exonLen
-        print("cdsLen", cdsLen)
+        print("cdsLen", cdsLen, file=sys.stderr)
     elif strand == "-":
         cds_start = cdsList[-1].end
         cds_end = cdsList[0].start
@@ -312,7 +359,7 @@ def get_CDS_relativePos(exonsList, cdsList, strand):
                 break
             else:
                 scanedLen = scanedLen + exonLen
-        print ("cdsLen", cdsLen)
+        print("cdsLen", cdsLen, file=sys.stderr)
     return cds_relative_start, cds_relative_end
 
 def pep_position_to_trans_relativePOS (pep_start, pep_end, cds_relative_start, cds_relative_end):
@@ -325,45 +372,49 @@ def pep_position_to_trans_relativePOS (pep_start, pep_end, cds_relative_start, c
     return trans_start, trans_end
 
 def main():
-    pep_file, gtf_file, out_file = parse_args(sys.argv[1:])
+    pep_file, gtf_file, out_file, secondary_ORF_file = parse_args(sys.argv[1:])
+
+    if secondary_ORF_file != None:
+        cdsinfo = make_cdsList(secondary_ORF_file)
+
     pepinfo = make_pepList(pep_file)
     #print(pepinfo)
     outfn = open(out_file, "w+")
     # Make GFFdb, store db in tmpGFF.db file
     make_GFFdb(gtf_file)
     db = gffutils.FeatureDB('tmpGFF.db', keep_order=True)
-    for mRNA in db.features_of_type("transcript", order_by="start"):
-        # print transcript_id
-        print("Processing transcript_id: ", mRNA["transcript_id"][0])
-        # print transcript
-        #print(mRNA, file = outfn)
-        transcript = mRNA.id
-        exons = get_exonList(db, mRNA, "exon")
-        cds = get_exonList(db, mRNA, "CDS")
-        # Some transcript doesn't have CDS
-        # Need to check first
-        cds_relative_start, cds_relative_end = get_CDS_relativePos(exons, cds, mRNA.strand)
-        print("relative position: ", cds_relative_start, " ", cds_relative_end)
-        if transcript in pepinfo:
-            for pep in pepinfo[transcript]:
-                pep_start = pepinfo[transcript][pep][0]
-                pep_end = pepinfo[transcript][pep][1]
-                print("pep_start is ", pep_start)
-                print("pep_end is", pep_end)
-                ## Covert pep start and end to relative position on transcript
-                trans_start, trans_end = pep_position_to_trans_relativePOS(pep_start, pep_end, cds_relative_start, cds_relative_end)
-                print("trans_start", trans_start)
-                print("trans_end", trans_end)
-                fiveUTR, threeUTR, pep_exons = Get_cds(exons, pep, trans_start, trans_end, mRNA.strand)
-
-                #Disable printing fiveUTR and threeUTR
-                #for i in fiveUTR:
-                #    print(i, file = outfn)
-                #for i in threeUTR:
-                #    print(i, file = outfn)
-                print(pep_exons)
-                for i in pep_exons:
-                    print(i, file = outfn)
+    out_gtf = []
+    for transcript in pepinfo:
+        print("Processing transcript_id: ", transcript)
+        exons = get_exonList(db, transcript, "exon")
+        for pep in pepinfo[transcript]:
+            cds_type, cds_id, pep_start, pep_end = pepinfo[transcript][pep]
+            print("peptide is from", cds_type, "ORF:", cds_id)
+            print("pep_start is", pep_start)
+            print("pep_end is", pep_end)
+            if cds_type == "major":
+                cds = get_exonList(db, transcript, "CDS")
+                cds_relative_start, cds_relative_end = get_CDS_relativePos(exons, cds, db[transcript].strand)
+            elif secondary_ORF_file == None:
+                sys.exit("Please provide secondary ORF file.")
+            elif cds_id not in cdsinfo[transcript]:
+                print("cds_id", cds_id)
+                print("cdsinfo[transcript]", cdsinfo[transcript])
+                sys.exit("cds_id is not included in secondary ORF file.")
+            else:
+                cds_relative_start, cds_relative_end = cdsinfo[transcript][cds_id]
+            trans_start, trans_end = pep_position_to_trans_relativePOS(pep_start, pep_end, cds_relative_start, cds_relative_end)
+            print("trans_start", trans_start)
+            print("trans_end", trans_end)
+            fiveUTR, threeUTR, pep_exons = Get_cds(exons, pep, trans_start, trans_end, db[transcript].strand)
+            print(pep_exons)
+            for i in pep_exons:
+                #print(i, file = outfn)
+                out_gtf.append(i)
+    ## Unique elements by set()
+    for i in set(out_gtf):
+        print(i, file = outfn)
     outfn.close()
+
 if __name__ == "__main__":
     main()
