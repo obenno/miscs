@@ -9,11 +9,21 @@
 ## provide relative position of secondary ORFs (extract from
 ## gff output of Transdecoder).
 
+## When use database backend, don't modified database entries,
+## print out instead.
 import sys
 import numpy as np
 import gffutils
 #import getopt
 import argparse
+
+import random
+import string
+
+def randomString(stringLength=10):
+    """Generate a random string of fixed length """
+    letters = string.ascii_lowercase
+    return ''.join(random.choice(letters) for i in range(stringLength))
 
 def parse_args (argv):
     parser = argparse.ArgumentParser(description="Map peptides to genomic regions")
@@ -126,13 +136,13 @@ def get_exonList (GFFdb, TranscriptFeature, Featuretype):
 #    return cds
 
 def make_newFeature(chrom, source, featureType, start, end, strand, transcript, gene):
+    ## DO NOT MAKE NEW FEATURE, PRINT NEW INTO ANOTHER CONTAINER
     transcript = "\"" + transcript + "\""
     gene = "\"" + gene + "\""
     annotation = "transcript_id " + transcript + ";" + " " + "gene_id " + gene + ";"
     data = (chrom, source, featureType, str(start), str(end), ".", strand, ".", annotation)
     newline = "\t".join(data)
-    f = gffutils.feature.feature_from_line(newline)
-    return f
+    return newline
 
 def calc_cds_frame(exonsList, strand):
     ## This functin used input CDS exons list,
@@ -148,26 +158,32 @@ def calc_cds_frame(exonsList, strand):
     frame = 0
     cdsLen = 0
     for i in ordered_cdsExon:
-        i.frame = str(frame)
-        exonLen = i.stop - i.start +1
+        chromosome, source, featuretype, exon_start, exon_end, gff_score, strand, frame, annotation = i.split("\t")
+        exon_start = int(exon_start)
+        exon_end = int(exon_end)
+        exonLen = exon_end - exon_start +1
         cdsLen = cdsLen + exonLen
         if cdsLen%3 == 0:
             frame = 0
         else:
             frame = 3 - (cdsLen%3)
+        data = (chromosome, source, featuretype, str(exon_start), str(exon_end), gff_score, strand, str(frame), annotation)
+        i = "\t".join(data)
     return ordered_cdsExon
 
 def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
     ## This is cds generating function inherited from
     ## mapCDS_to_Gtf.py, we can use this function to
     ## generate peptide exons like each peptide is
-    ## a small CDS
+    ## a small CDS.
+    ## Peptides sequence will be stored as transcript_name
     
     ## This function is using exons and cds info
     ## to generate cds regions;
     ## cds_start and cds_end is position relative
     ## to transcript not genomic coordinates.
 
+    ## DO NOT MODIFY DATABASE ENTRIES!!!
     fiveUTR_exons = []
     left_UTR = []
     threeUTR_exons = []
@@ -175,6 +191,8 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
     cds_exons = []
     # Get transcript length
     transLen = 0
+    tag = randomString(5)
+    
     for i in exonsList:
         transLen = transLen + i.stop - i.start + 1
     print("Transcript length is ", transLen)
@@ -195,6 +213,7 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
     ## Get utr/cds boundary exon
     scanedLen = 0
     for i in exonsList:
+        transID = pep_ID + "_" + i["transcript_id"][0] + "_" + tag
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
         if scanedLen-exonLen+1 <= start and \
@@ -206,11 +225,11 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
             firstCDS_end = i.stop
             lastUTR = make_newFeature(i.chrom, "TransDecoder", "five_prime_UTR",
                                       lastUTR_start, lastUTR_end, strand,
-                                      pep_ID, i["gene_id"][0])
+                                      transID, i["gene_id"][0])
             left_UTR.append(lastUTR)
             firstCDS = make_newFeature(i.chrom, "TransDecoder", "CDS",
                                        firstCDS_start, firstCDS_end, strand,
-                                       pep_ID, i["gene_id"][0])
+                                       transID, i["gene_id"][0])
             cds_exons.append(firstCDS)
             idx_left = exonsList.index(i)
             break
@@ -218,6 +237,7 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
     # Get right_UTR
     scanedLen = 0
     for i in exonsList:
+        transID = pep_ID + "_" + i["transcript_id"][0] + "_" + tag
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
         if scanedLen >= end and \
@@ -229,17 +249,18 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
             firstUTR_end = i.stop
             firstUTR = make_newFeature(i.chrom, "TransDecoder", "three_prime_UTR",
                                        firstUTR_start, firstUTR_end, strand,
-                                       pep_ID, i["gene_id"][0])
+                                       transID, i["gene_id"][0])
             right_UTR.append(firstUTR)
             lastCDS = make_newFeature(i.chrom, "TransDecoder", "CDS",
                                       lastCDS_start, lastCDS_end, strand,
-                                      pep_ID, i["gene_id"][0])
+                                      transID, i["gene_id"][0])
             cds_exons.append(lastCDS)
             idx_right = exonsList.index(i)
             break
     ## Condition2: start/end located in the same exon
     scanedLen = 0
     for i in exonsList:
+        transID = pep_ID + "_" + i["transcript_id"][0] + "_" + tag
         exonLen = i.stop-i.start + 1
         scanedLen = scanedLen + exonLen
         if scanedLen >= end and scanedLen -exonLen+1 <= start:
@@ -251,13 +272,13 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
             firstUTR_end = i.stop
             lastUTR = make_newFeature(i.chrom, "TransDecoder", "five_prime_UTR",
                                       lastUTR_start, lastUTR_end, strand,
-                                      pep_ID, i["gene_id"][0])
+                                      transID, i["gene_id"][0])
             firstUTR = make_newFeature(i.chrom, "TransDecoder", "three_prime_UTR",
                                        firstUTR_start, firstUTR_end, strand,
-                                       pep_ID, i["gene_id"][0])
+                                       transID, i["gene_id"][0])
             CDS = make_newFeature(i.chrom, "TransDecoder", "CDS",
                                   CDS_start, CDS_end, strand,
-                                  pep_ID, i["gene_id"][0])
+                                  transID, i["gene_id"][0])
             cds_exons.append(CDS)
             left_UTR.append(lastUTR)
             right_UTR.append(firstUTR)
@@ -266,30 +287,35 @@ def Get_cds (exonsList, pep_ID, cds_start, cds_end, strand):
             break
     # Complement CDS exonsList and right_UTR
     for i in exonsList:
+        transID = pep_ID + "_" + i["transcript_id"][0] + "_" + tag
+        new_feature = ""
         idx = exonsList.index(i)
         if idx < idx_left:
-            i.source = "TransDecoder"
-            i.featuretype = "five_prime_UTR"
-            left_UTR.insert(len(left_UTR)-1, i)
+            new_feature = make_newFeature(i.chrom, "TransDecoder", "five_prime_UTR",
+                                          i.start, i.stop, i.strand,
+                                          transID, i["gene_id"][0])
+            left_UTR.insert(len(left_UTR)-1, new_feature)
         if idx > idx_left and idx < idx_right:
-            i.source = "TransDecoder"
-            i.featuretype = "CDS"
-            cds_exons.insert(len(cds_exons)-1, i)
+            new_feature = make_newFeature(i.chrom, "TransDecoder", "CDS",
+                                          i.start, i.stop, i.strand,
+                                          transID, i["gene_id"][0])
+            cds_exons.insert(len(cds_exons)-1, new_feature)
         if idx > idx_right:
-            i.source = "TransDecoder"
-            i.featuretype = "three_prime_UTR"
-            right_UTR.append(i)
+            new_feature = make_newFeature(i.chrom, "TransDecoder", "three_prime_UTR",
+                                          i.start, i.stop, i.strand,
+                                          transID, i["gene_id"][0])
+            right_UTR.append(new_feature)
 
     if strand == "+":
         fiveUTR_exons = left_UTR
         threeUTR_exons = right_UTR
     elif strand == "-":
-        for i in left_UTR:
-            i.featuretype = "three_prime_UTR"
         threeUTR_exons = left_UTR
-        for i in right_UTR:
-            i.featuretype = "five_prime_UTR"
+        for i in threeUTR_exons:
+            i = i.replace("five", "three")
         fiveUTR_exons = right_UTR
+        for i in fiveUTR_exons:
+            i = i.replace("three", "five")
 
     # These codes is to get cds feature frame column
     cds_exons = calc_cds_frame(cds_exons, strand)
@@ -407,13 +433,14 @@ def main():
             print("trans_start", trans_start)
             print("trans_end", trans_end)
             fiveUTR, threeUTR, pep_exons = Get_cds(exons, pep, trans_start, trans_end, db[transcript].strand)
-            print(pep_exons)
+            #print(pep_exons)
+            print("===================")
             for i in pep_exons:
-                #print(i, file = outfn)
-                out_gtf.append(i)
+                print(i, file = outfn)
+                #out_gtf.append(i)
     ## Unique elements by set()
-    for i in set(out_gtf):
-        print(i, file = outfn)
+    #for i in set(out_gtf):
+    #    print(i, file = outfn)
     outfn.close()
 
 if __name__ == "__main__":
