@@ -65,6 +65,8 @@ def infer_transcriptGFF (dbinput):
     outGFF=[]
     for transcript in db.all_features(featuretype="mRNA", order_by="seqid"):
         transcript_id=transcript.attributes['ID'][0]
+        for gene in db.parents(transcript, featuretype='gene'):
+            gene_id=gene.attributes['ID'][0]
         transcript_len=0
         five_UTR_len=0
         CDS_len=0
@@ -80,27 +82,33 @@ def infer_transcriptGFF (dbinput):
             CDS_len += cds.end-cds.start+1
         three_UTR_len = transcript_len - five_UTR_len - CDS_len
         # Gene line
-        anno_id= "".join(["ID=", "Gene.", transcript_id])
+        anno_id= "".join(["ID=", gene_id])
         outline="\t".join([transcript_id, "Transcript", "gene", "1", str(transcript_len), ".", "+", ".", anno_id])
         outGFF.append(outline)
+
         # mRNA line
-        anno_id= "".join(["ID=", "mRNA.", transcript_id])
-        parent_id = "".join(["Parent=", "Gene.", transcript_id])
+        anno_id= "".join(["ID=", transcript_id])
+        parent_id = "".join(["Parent=", gene_id])
         outline="\t".join([transcript_id, "Transcript", "mRNA", "1", str(transcript_len), ".", "+", ".", ";".join([anno_id, parent_id])])
         outGFF.append(outline)
+        # exon line, all transcript were treated as single exon
+        anno_id= "".join(["ID=", transcript_id, ".exon.1"])
+        parent_id = "".join(["Parent=", transcript_id])
+        outline="\t".join([transcript_id, "Transcript", "exon", "1", str(transcript_len), ".", "+", ".", ";".join([anno_id, parent_id])])
+        outGFF.append(outline)
         # 5UTR line
-        anno_id= "".join(["ID=", "fiveUTR.", transcript_id])
-        parent_id = "".join(["Parent=", "mRNA.", transcript_id])
+        anno_id= "".join(["ID=", transcript_id, ".five_prime_UTR.1"])
+        parent_id = "".join(["Parent=", transcript_id])
         outline="\t".join([transcript_id, "Transcript", "five_prime_UTR", "1", str(five_UTR_len), ".", "+", ".", ";".join([anno_id, parent_id])])
         outGFF.append(outline)
         # CDS line
-        anno_id= "".join(["ID=", "cds.", transcript_id])
-        parent_id = "".join(["Parent=", "mRNA.", transcript_id])
+        anno_id= "".join(["ID=", transcript_id, ".CDS.1"])
+        parent_id = "".join(["Parent=", transcript_id])
         outline="\t".join([transcript_id, "Transcript", "CDS", str(five_UTR_len+1), str(five_UTR_len+CDS_len), ".", "+", ".", ";".join([anno_id, parent_id])])
         outGFF.append(outline)
         # 3UTR line
-        anno_id= "".join(["ID=", "threeUTR.", transcript_id])
-        parent_id = "".join(["Parent=", "mRNA.", transcript_id])
+        anno_id= "".join(["ID=", transcript_id, ".three_prime_UTR.1"])
+        parent_id = "".join(["Parent=", transcript_id])
         outline="\t".join([transcript_id, "Transcript", "three_prime_UTR", str(five_UTR_len+CDS_len+1), str(transcript_len), ".", "+", ".", ";".join([anno_id, parent_id])])
         outGFF.append(outline)
     
