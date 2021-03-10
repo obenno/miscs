@@ -39,8 +39,20 @@ bedtools genomecov -d -split -ibam tmp.aln.bam |
 
 ## Run pbsim parallelly with distinct depth per transcript
 outdir2=$(mktemp -d -p ./)
-awk '$2>0{print "pbsim --depth "$2" --prefix '$outdir2/'"$1" --id-prefix "$1"_ --sample-profile-id profile1 <(fasta_formatter -t -i Gmax_a2v1.transcriptome.Chr01.fa | grep "$1" | awk '\''{print \">\"$1\"\\n\"$2}'\'')"}' tmp.depth |
+## Since pbsim could not restrain strand, reads will be generated
+## for both of the two direction, we doubled --depth here, and
+## selected output reads with the same direction as reference transcripts
+## for subsequent use
+awk '$2>0{print "pbsim --depth "$2*2" --prefix '$outdir2/'"$1" --id-prefix "$1"_ --sample-profile-id profile1 <(fasta_formatter -t -i Gmax_a2v1.transcriptome.Chr01.fa | grep "$1" | awk '\''{print \">\"$1\"\\n\"$2}'\'')"}' tmp.depth |
     parallel -P $threads
 
-cat $outdir2/*.fastq > $outReads
-rm -rf $outdir1 $outdir2 tmp.depth tmp.aln.bam
+cat $outdir2/*.fastq > tmpReads.fq
+
+## Mapped temporary reads to reference with minimap2
+minimap2 -t $threads -ax map-ont $refTrans tmpReads.fq |
+    samtools view -F 0x4 -F 0x100 -F 0x10 |
+    awk '{print $1}' |
+    awk 'NR==FNR{a[$1]}NR>FNR{if(substr($1,2) in a){print; getline;print;getline;print;getline;print}}' - tmpReads.fq > $outReads
+
+rm -rf $outdir1 $outdir2 tmp.depth tmp.aln.bam tmpReads.fq
+
