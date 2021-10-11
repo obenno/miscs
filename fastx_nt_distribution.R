@@ -62,7 +62,7 @@ if(!opt$plotN){
 
 p <- ggplot(d, aes(x=column, y=percent, group = nucleotide,
                    color = nucleotide)) +
-    geom_line(alpha = 0.8) +
+    geom_line(alpha = 0.8, size = 1) +
     scale_color_brewer(palette = "Dark2") +
     theme_bw() +
     theme(panel.grid = element_blank(),
