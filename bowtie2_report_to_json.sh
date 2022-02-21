@@ -28,4 +28,4 @@ jq -n \
    --arg non_concordant_unique "$non_concordant_unique" \
    --arg non_concordant_multiple "$non_concordant_multiple" \
    --arg totalRate "$totalRate" \
-   '{sampleName: $sampleName, uniqueReadPair: $concordant_unique, uniqueMappingRate: $concordant_unique_rate, discordant_unique: $discordant_unique, non_concordant_unique: $non_concordant_unique, non_concordant_multiple: $non_concordant_multiple, totalMappingRate: $totalRate}'
+   '{sampleName: $sampleName, totalFragments: $totalFragments, uniqueReadPair: $concordant_unique, uniqueMappingRate: $concordant_unique_rate, discordant_unique: $discordant_unique, non_concordant_unique: $non_concordant_unique, non_concordant_multiple: $non_concordant_multiple, totalMappingRate: $totalRate}'
